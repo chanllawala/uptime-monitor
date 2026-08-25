@@ -1,0 +1,47 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: uptime
+      POSTGRES_PASSWORD: uptime
+      POSTGRES_DB: uptime
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      # web and worker wait on this, so neither starts against a database
+      # that is still initialising.
+      test: ["CMD-SHELL", "pg_isready -U uptime -d uptime"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  web:
+    build: .
+    command: uvicorn app.web:app --host 0.0.0.0 --port 8000
+    environment:
+      DATABASE_URL: postgresql://uptime:uptime@db:5432/uptime
+      SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
+      FAILURE_THRESHOLD: ${FAILURE_THRESHOLD:-3}
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  worker:
+    build: .
+    command: python -m app.scheduler
+    environment:
+      DATABASE_URL: postgresql://uptime:uptime@db:5432/uptime
+      SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
+      FAILURE_THRESHOLD: ${FAILURE_THRESHOLD:-3}
+      SCHEDULER_TICK_SECONDS: ${SCHEDULER_TICK_SECONDS:-5}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pgdata:

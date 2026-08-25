@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Lint and test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Lint
+        run: ruff check .
+
+      - name: Check formatting
+        run: ruff format --check .
+
+      - name: Run tests
+        run: pytest -v
+
+  docker:
+    name: Build image
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build
+        run: docker build -t uptime-monitor:${{ github.sha }} .
+
+      - name: Verify the image starts and serves traffic
+        run: |
+          docker run -d --name smoke \
+            -e DATABASE_URL=sqlite:///./uptime.db \
+            -p 8000:8000 uptime-monitor:${{ github.sha }}
+          for i in $(seq 1 20); do
+            if curl -sf http://localhost:8000/health; then
+              echo "container healthy"; docker rm -f smoke; exit 0
+            fi
+            sleep 2
+          done
+          echo "container failed to become healthy"; docker logs smoke; exit 1
+
+  deploy:
+    name: Deploy to VM
+    runs-on: ubuntu-latest
+    needs: [test, docker]
+    # Only on pushes to the default branch, never on pull requests, and only
+    # once the VM secrets have been configured in the repository settings.
+    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+    steps:
+      - name: Deploy over SSH
+        # Skipped automatically until DEPLOY_HOST is set, so the workflow stays
+        # green before the VM exists.
+        if: ${{ vars.DEPLOY_ENABLED == 'true' }}
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            cd ~/uptime-monitor
+            git pull --ff-only
+            docker compose pull || true
+            docker compose up -d --build
+            docker image prune -f

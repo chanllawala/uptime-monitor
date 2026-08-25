@@ -1,0 +1,14 @@
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+# B008 forbids function calls in argument defaults, but `Depends(...)` and
+# `Form(...)` in defaults is exactly how FastAPI declares dependencies — the
+# rule is a false positive for this framework.
+ignore = ["B008"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = ["error::DeprecationWarning"]

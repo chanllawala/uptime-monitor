@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h1>Dashboard</h1>
+
+{% if not slack_enabled %}
+<div class="banner">
+  <strong>Slack alerts are not configured.</strong> Set <code>SLACK_WEBHOOK_URL</code>
+  in your <code>.env</code> to deliver alerts; until then they are written to the worker log.
+</div>
+{% endif %}
+
+<div class="grid">
+  <div class="card"><div class="value">{{ summaries|length }}</div><div class="label">Monitors</div></div>
+  <div class="card"><div class="value up">{{ up_count }}</div><div class="label">Up</div></div>
+  <div class="card"><div class="value {% if down_count %}down{% endif %}">{{ down_count }}</div><div class="label">Down</div></div>
+  <div class="card"><div class="value">{{ hours }}h</div><div class="label">Reporting window</div></div>
+</div>
+
+<h2>Add a monitor</h2>
+<form class="addbar" method="post" action="/monitors">
+  <input name="name" placeholder="Name" required>
+  <input name="url" placeholder="https://example.com" required>
+  <input name="interval_seconds" type="number" min="10" placeholder="Interval (s)">
+  <button class="primary" type="submit">Add monitor</button>
+</form>
+
+<h2>Monitors</h2>
+<table>
+  <thead>
+    <tr>
+      <th>Status</th><th>Name</th><th>Uptime ({{ hours }}h)</th>
+      <th>Avg response</th><th>Last check</th><th>Checks</th><th></th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for s in summaries %}
+    <tr>
+      <td><span class="status {{ s.status }}"><span class="dot"></span>{{ s.status_label }}</span></td>
+      <td>
+        <a href="/monitors/{{ s.monitor.id }}">{{ s.monitor.name }}</a>
+        {% if not s.monitor.enabled %}<span class="pill">paused</span>{% endif %}
+        <div class="muted" style="font-size:.78rem">{{ s.monitor.url }}</div>
+      </td>
+      <td>{% if s.uptime_percent is not none %}{{ s.uptime_percent }}%{% else %}<span class="muted">—</span>{% endif %}</td>
+      <td>{% if s.avg_response_ms is not none %}{{ s.avg_response_ms }} ms{% else %}<span class="muted">—</span>{% endif %}</td>
+      <td>
+        {% if s.last_check %}
+          <span class="muted">{{ s.last_check.checked_at.strftime("%H:%M:%S") }}</span>
+          {% if s.last_check.error %}<div class="down" style="font-size:.78rem">{{ s.last_check.error }}</div>{% endif %}
+        {% else %}<span class="muted">never</span>{% endif %}
+      </td>
+      <td class="muted">{{ s.check_count }}</td>
+      <td style="white-space:nowrap">
+        <form class="inline" method="post" action="/monitors/{{ s.monitor.id }}/toggle">
+          <button type="submit">{{ "Pause" if s.monitor.enabled else "Resume" }}</button>
+        </form>
+        <form class="inline" method="post" action="/monitors/{{ s.monitor.id }}/delete"
+              onsubmit="return confirm('Delete {{ s.monitor.name }} and all its history?')">
+          <button class="danger" type="submit">Delete</button>
+        </form>
+      </td>
+    </tr>
+  {% else %}
+    <tr><td colspan="7" class="empty">No monitors yet — add one above.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+<h2 style="margin-top:2rem">Recent incidents</h2>
+<table>
+  <thead><tr><th>Monitor</th><th>Started</th><th>Duration</th><th>Cause</th><th>State</th></tr></thead>
+  <tbody>
+  {% for i in incidents %}
+    <tr>
+      <td><a href="/monitors/{{ i.monitor.id }}">{{ i.monitor.name }}</a></td>
+      <td class="muted">{{ i.started_at.strftime("%Y-%m-%d %H:%M:%S") }}</td>
+      <td>{{ i.duration_seconds(now) | duration }}</td>
+      <td class="muted">{{ i.cause or "—" }}</td>
+      <td>
+        {% if i.is_open %}<span class="status down"><span class="dot"></span>Ongoing</span>
+        {% else %}<span class="status up"><span class="dot"></span>Resolved</span>{% endif %}
+      </td>
+    </tr>
+  {% else %}
+    <tr><td colspan="5" class="empty">No incidents recorded. That's the good outcome.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+{% endblock %}

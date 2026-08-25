@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Uptime Monitor{% endblock %}</title>
+  <style>
+    :root {
+      --bg: #0f1419;
+      --panel: #171c23;
+      --panel-2: #1e242d;
+      --border: #2a323d;
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --up: #3fb950;
+      --down: #f85149;
+      --warn: #d29922;
+      --accent: #58a6ff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    header {
+      border-bottom: 1px solid var(--border);
+      background: var(--panel);
+      padding: 0.9rem 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+    header .brand { font-weight: 700; font-size: 1.05rem; }
+    header .brand span { color: var(--accent); }
+    header nav { flex: 1; display: flex; gap: 1rem; }
+    .pill {
+      font-size: .75rem; padding: .15rem .5rem; border-radius: 999px;
+      border: 1px solid var(--border); color: var(--muted);
+    }
+    main { max-width: 1080px; margin: 0 auto; padding: 1.5rem; }
+    h1 { font-size: 1.4rem; margin: 0 0 1rem; }
+    h2 { font-size: 1rem; margin: 0 0 .75rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+    .card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 1rem; }
+    .card .value { font-size: 1.7rem; font-weight: 700; }
+    .card .label { color: var(--muted); font-size: .82rem; }
+    table { width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+    th, td { text-align: left; padding: .7rem .9rem; border-bottom: 1px solid var(--border); font-size: .88rem; }
+    th { background: var(--panel-2); color: var(--muted); font-size: .75rem; text-transform: uppercase; letter-spacing: .04em; }
+    tr:last-child td { border-bottom: none; }
+    .status { display: inline-flex; align-items: center; gap: .4rem; font-weight: 600; font-size: .82rem; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+    .up   { color: var(--up); }   .up .dot   { background: var(--up); box-shadow: 0 0 6px var(--up); }
+    .down { color: var(--down); } .down .dot { background: var(--down); box-shadow: 0 0 6px var(--down); }
+    .unknown { color: var(--muted); } .unknown .dot { background: var(--muted); }
+    .muted { color: var(--muted); }
+    form.inline { display: inline; }
+    button {
+      cursor: pointer; font: inherit; font-size: .8rem; font-weight: 600;
+      border: 1px solid var(--border); background: var(--panel-2); color: var(--text);
+      padding: .3rem .7rem; border-radius: 6px;
+    }
+    button:hover { border-color: var(--accent); color: var(--accent); }
+    button.primary { background: var(--accent); border-color: var(--accent); color: #07131f; }
+    button.primary:hover { opacity: .9; color: #07131f; }
+    button.danger:hover { border-color: var(--down); color: var(--down); }
+    .addbar { display: flex; gap: .6rem; flex-wrap: wrap; margin-bottom: 1.5rem; }
+    .addbar input {
+      background: var(--panel-2); border: 1px solid var(--border); color: var(--text);
+      padding: .45rem .6rem; border-radius: 6px; font: inherit; font-size: .85rem;
+    }
+    .addbar input[name="name"] { width: 170px; }
+    .addbar input[name="url"] { flex: 1; min-width: 220px; }
+    .addbar input[name="interval_seconds"] { width: 110px; }
+    .banner {
+      background: rgba(210,153,34,.1); border: 1px solid var(--warn); color: var(--warn);
+      padding: .6rem .9rem; border-radius: 8px; font-size: .85rem; margin-bottom: 1.25rem;
+    }
+    .empty { color: var(--muted); text-align: center; padding: 2rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">⬤ Uptime<span>Monitor</span></div>
+    <nav><a href="/">Dashboard</a></nav>
+    <span class="pill">{{ now.strftime("%Y-%m-%d %H:%M UTC") }}</span>
+  </header>
+  <main>{% block content %}{% endblock %}</main>
+</body>
+</html>

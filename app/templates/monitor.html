@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% set m = summary.monitor %}
+{% block title %}{{ m.name }} — Uptime Monitor{% endblock %}
+{% block content %}
+
+<p class="muted" style="margin:0 0 .4rem"><a href="/">← Dashboard</a></p>
+<h1 style="display:flex;align-items:center;gap:.7rem">
+  <span class="status {{ summary.status }}"><span class="dot"></span></span>
+  {{ m.name }}
+</h1>
+<p class="muted" style="margin-top:-.6rem">
+  <a href="{{ m.url }}" target="_blank" rel="noopener noreferrer">{{ m.url }}</a>
+  · every {{ m.interval_seconds }}s · expects HTTP {{ m.expected_status }}
+</p>
+
+<div class="grid">
+  <div class="card">
+    <div class="value {{ summary.status }}">{{ summary.status_label }}</div>
+    <div class="label">Current status</div>
+  </div>
+  <div class="card">
+    <div class="value">{% if summary.uptime_percent is not none %}{{ summary.uptime_percent }}%{% else %}—{% endif %}</div>
+    <div class="label">Uptime ({{ hours }}h)</div>
+  </div>
+  <div class="card">
+    <div class="value">{% if summary.avg_response_ms is not none %}{{ summary.avg_response_ms }}<span style="font-size:1rem"> ms</span>{% else %}—{% endif %}</div>
+    <div class="label">Avg response</div>
+  </div>
+  <div class="card">
+    <div class="value">{{ summary.check_count }}</div>
+    <div class="label">Checks ({{ hours }}h)</div>
+  </div>
+</div>
+
+<form class="inline" method="post" action="/monitors/{{ m.id }}/check">
+  <button class="primary" type="submit">Check now</button>
+</form>
+<form class="inline" method="post" action="/monitors/{{ m.id }}/toggle">
+  <button type="submit">{{ "Pause" if m.enabled else "Resume" }}</button>
+</form>
+
+<h2 style="margin-top:2rem">Response time</h2>
+<div class="card" style="height:280px">
+  <canvas id="chart"></canvas>
+</div>
+
+<h2 style="margin-top:2rem">Incidents</h2>
+<table>
+  <thead><tr><th>Started</th><th>Duration</th><th>Cause</th><th>State</th></tr></thead>
+  <tbody>
+  {% for i in incidents %}
+    <tr>
+      <td class="muted">{{ i.started_at.strftime("%Y-%m-%d %H:%M:%S") }}</td>
+      <td>{{ i.duration_seconds(now) | duration }}</td>
+      <td class="muted">{{ i.cause or "—" }}</td>
+      <td>{% if i.is_open %}<span class="status down"><span class="dot"></span>Ongoing</span>
+          {% else %}<span class="status up"><span class="dot"></span>Resolved</span>{% endif %}</td>
+    </tr>
+  {% else %}
+    <tr><td colspan="4" class="empty">No incidents for this monitor.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+<h2 style="margin-top:2rem">Recent checks</h2>
+<table>
+  <thead><tr><th>Time</th><th>Result</th><th>Status</th><th>Response</th><th>Detail</th></tr></thead>
+  <tbody>
+  {% for c in recent %}
+    <tr>
+      <td class="muted">{{ c.checked_at.strftime("%H:%M:%S") }}</td>
+      <td><span class="status {{ 'up' if c.is_up else 'down' }}"><span class="dot"></span>{{ "Up" if c.is_up else "Down" }}</span></td>
+      <td class="muted">{{ c.status_code or "—" }}</td>
+      <td>{% if c.response_time_ms %}{{ "%.0f"|format(c.response_time_ms) }} ms{% else %}<span class="muted">—</span>{% endif %}</td>
+      <td class="muted">{{ c.error or "" }}</td>
+    </tr>
+  {% else %}
+    <tr><td colspan="5" class="empty">No checks recorded yet.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script>
+  const labels = {{ labels | tojson }};
+  const values = {{ values | tojson }};
+  new Chart(document.getElementById("chart"), {
+    type: "line",
+    data: {
+      labels,
+      datasets: [{
+        label: "Response time (ms)",
+        data: values,
+        borderColor: "#58a6ff",
+        backgroundColor: "rgba(88,166,255,.12)",
+        borderWidth: 2,
+        pointRadius: 0,
+        tension: .3,
+        fill: true,
+        // A gap in the line marks a failed check, so outages read visually
+        // rather than being smoothed over as if nothing happened.
+        spanGaps: false,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: "#8b949e" } } },
+      scales: {
+        x: { ticks: { color: "#8b949e", maxTicksLimit: 10 }, grid: { color: "#2a323d" } },
+        y: { beginAtZero: true, ticks: { color: "#8b949e" }, grid: { color: "#2a323d" } }
+      }
+    }
+  });
+</script>
+
+{% endblock %}

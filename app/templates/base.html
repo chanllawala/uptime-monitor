@@ -81,6 +81,83 @@
       padding: .6rem .9rem; border-radius: 8px; font-size: .85rem; margin-bottom: 1.25rem;
     }
     .empty { color: var(--muted); text-align: center; padding: 2rem; }
+    .actionbar { display: flex; gap: .6rem; }
+
+    /* Long URLs are the main source of horizontal overflow on narrow screens. */
+    .url, td .muted { overflow-wrap: anywhere; }
+
+    /* ---- Tablet ---- */
+    @media (max-width: 900px) {
+      main { padding: 1rem; }
+      .addbar input[name="name"],
+      .addbar input[name="interval_seconds"] { width: 100%; }
+    }
+
+    /* ---- Phone ----
+       Below this width a seven-column table cannot be read without pinching,
+       so each row is restacked as a labelled card. The header cells are hidden
+       and their text reappears per row via data-label, which keeps one
+       readable markup source instead of duplicating the table for mobile. */
+    @media (max-width: 760px) {
+      header { flex-wrap: wrap; gap: .5rem .9rem; padding: .75rem 1rem; }
+      header nav { flex: 1 0 auto; }
+      header .pill { order: 3; }
+
+      h1 { font-size: 1.25rem; }
+      .grid { grid-template-columns: 1fr 1fr; gap: .75rem; }
+      .card .value { font-size: 1.4rem; }
+
+      .addbar { flex-direction: column; }
+      .addbar input, .addbar button { width: 100%; }
+
+      table { border: none; background: none; border-radius: 0; }
+      thead { display: none; }
+      table, tbody, tr, td { display: block; width: 100%; }
+
+      tr {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        margin-bottom: .7rem;
+        padding: .3rem 0;
+      }
+
+      td {
+        border-bottom: none;
+        display: grid;
+        grid-template-columns: 6.5rem 1fr;
+        align-items: baseline;
+        gap: .75rem;
+        padding: .4rem .85rem;
+      }
+
+      td::before {
+        content: attr(data-label);
+        color: var(--muted);
+        font-size: .7rem;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+      }
+
+      /* Rows spanning the whole card: the empty-state message, and the
+         action buttons which need the full width rather than a label. */
+      td.empty, td.actions { display: block; padding: .6rem .85rem; }
+      td.empty::before, td.actions::before { content: none; }
+      td.actions { display: flex; gap: .5rem; }
+      td.actions form, td.actions button { flex: 1; }
+
+      /* Comfortable touch targets — 0.3rem tall buttons are unusable on glass. */
+      button { padding: .6rem .8rem; min-height: 44px; }
+
+      .chart-wrap { height: 220px !important; }
+      .actionbar { flex-direction: column; }
+      .actionbar form, .actionbar button { width: 100%; }
+    }
+
+    @media (max-width: 380px) {
+      .grid { grid-template-columns: 1fr; }
+      td { grid-template-columns: 1fr; gap: .15rem; }
+    }
   </style>
 </head>
 <body>

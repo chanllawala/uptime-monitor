@@ -23,6 +23,9 @@ deployed to a cloud VM.
   rolling window, plus a response-time chart per monitor.
 - **Managed from the browser.** Add, pause, delete, and force an immediate
   re-check without touching the database.
+- **Works on a phone.** Below 760px each table row restacks into a labelled
+  card, so the dashboard is readable when an alert reaches you away from a
+  desk — which is when you actually need it.
 
 ## Alerting behaviour
 

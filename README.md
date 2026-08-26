@@ -19,8 +19,14 @@ deployed to a cloud VM.
   closes it. The dashboard shows a timeline of outages with their durations.
 - **Real Slack alerts.** One message when a service goes down, one when it
   recovers, with the downtime included.
-- **Uptime reporting.** Uptime percentage and average response time over a
-  rolling window, plus a response-time chart per monitor.
+- **Uptime reporting.** Uptime percentage, average and p50/p95/p99 response
+  times over a rolling window, plus a response-time chart per monitor.
+- **Prometheus metrics.** `/metrics` exposes per-monitor state, uptime ratio,
+  latency percentiles, check counters and staleness, ready to scrape.
+- **Concurrent polling.** Checks fan out across a thread pool, so one slow
+  endpoint doesn't delay every monitor queued behind it.
+- **Structured logging.** `LOG_FORMAT=json` emits one object per line with
+  fields promoted to top level, for querying in a log aggregator.
 - **Managed from the browser.** Add, pause, delete, and force an immediate
   re-check without touching the database.
 - **Works on a phone.** Below 760px each table row restacks into a labelled
@@ -63,11 +69,13 @@ dashboard from rendering:
 | Module | Responsibility |
 | --- | --- |
 | `app/checker.py` | Performs one HTTP check; classifies the outcome |
-| `app/engine.py` | State machine: thresholds, incidents, when to alert |
+| `app/engine.py` | State machine: thresholds, incidents, when to alert; fans checks out across a thread pool |
 | `app/scheduler.py` | Worker loop; finds due monitors, handles shutdown |
 | `app/notifier.py` | Slack delivery, with a logging fallback |
-| `app/stats.py` | Uptime and response-time aggregation |
-| `app/web.py` | Dashboard routes |
+| `app/stats.py` | Uptime, averages and latency percentiles |
+| `app/metrics.py` | Prometheus exposition |
+| `app/logging_setup.py` | Text or JSON log formatting |
+| `app/web.py` | Dashboard routes and `/metrics` |
 
 `engine.py` is deliberately separate from `scheduler.py` so the alerting logic
 can be tested without any sleeping, threading, or real network calls.
@@ -114,6 +122,41 @@ logged and swallowed — a broken webhook must never take the poller down with
 it, and the failure is logged without the URL so the secret stays out of the
 logs.
 
+## Metrics
+
+`GET /metrics` returns Prometheus exposition format:
+
+```
+uptime_monitor_up{monitor="GitHub",url="https://github.com"} 1
+uptime_monitor_uptime_ratio{monitor="GitHub",url="https://github.com"} 1
+uptime_monitor_response_time_p95_milliseconds{monitor="GitHub",...} 74.9
+uptime_monitor_last_check_age_seconds{monitor="GitHub",...} 41.2
+uptime_checks_total{monitor="GitHub",...,result="up"} 5
+```
+
+Scrape it with:
+
+```yaml
+scrape_configs:
+  - job_name: uptime-monitor
+    static_configs:
+      - targets: ["localhost:8000"]
+```
+
+Two decisions worth noting:
+
+- **Metrics are derived from the database on each scrape, not held as
+  in-process counters.** The worker and the dashboard are separate containers,
+  so a counter incremented in the worker would be invisible to the process
+  serving `/metrics`. The database is the only state they share.
+- **A monitor that has never been checked is omitted from `uptime_monitor_up`
+  rather than reported as `0`.** Unknown is not the same as down, and
+  reporting it as down would page someone over a monitor added seconds ago.
+
+`uptime_monitor_last_check_age_seconds` is the one to alert on for the
+monitoring system itself — if it climbs past the poll interval, the worker has
+stalled and every other metric here has quietly gone stale.
+
 ## Configuration
 
 | Variable | Default | Meaning |
@@ -124,6 +167,10 @@ logs.
 | `SCHEDULER_TICK_SECONDS` | `5` | How often the worker looks for due monitors |
 | `DEFAULT_INTERVAL_SECONDS` | `60` | Default poll interval for new monitors |
 | `DEFAULT_TIMEOUT_SECONDS` | `10` | Request timeout per check |
+| `CHECK_CONCURRENCY` | `8` | Checks polled in parallel per tick |
+| `LOG_FORMAT` | `text` | `json` for structured logs |
+| `LOG_LEVEL` | `INFO` | Standard Python log levels |
+| `METRICS_WINDOW_HOURS` | `24` | Rolling window for `/metrics` and percentiles |
 
 ## Tests
 
@@ -132,10 +179,15 @@ pytest -v
 ruff check . && ruff format --check .
 ```
 
-28 tests covering HTTP classification (including timeouts and DNS failures),
-the incident state machine, uptime maths, and Slack payload construction —
-including one asserting that a failed delivery never writes the webhook URL
-into the logs.
+55 tests covering HTTP classification (including timeouts and DNS failures),
+the incident state machine, uptime maths and percentiles, Prometheus
+exposition, structured logging, and concurrent checking. Two worth
+singling out:
+
+- one asserts a failed Slack delivery never writes the webhook URL into the
+  logs, since request exceptions embed the full URL
+- one asserts checks genuinely overlap, by timing six deliberately slow
+  endpoints and requiring the total to come in well under their serial sum
 
 ## CI/CD
 
@@ -158,9 +210,12 @@ and wiring up the GitHub Actions deploy secrets.
 
 ## Notes and limitations
 
-- Checks run sequentially within a tick. That is fine for tens of monitors;
-  hundreds would want a thread pool or async client.
-- There is no authentication on the dashboard. It is intended to sit behind a
+- Checks fan out across a thread pool, which is fine into the hundreds.
+  Thousands would want an async client rather than a thread per request.
+- `/metrics` runs a handful of queries per monitor per scrape. At a few dozen
+  monitors that is negligible; at a few thousand it would need caching or a
+  single aggregate query.
+- There is no authentication on the dashboard or `/metrics`. It is intended to sit behind a
   reverse proxy or on a private network — see the Caddy section of the deploy
   guide.
 - Check history grows without bound. A production deployment would want a

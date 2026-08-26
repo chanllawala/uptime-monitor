@@ -11,6 +11,18 @@ class Settings(BaseSettings):
     default_interval_seconds: int = 60
     default_timeout_seconds: int = 10
 
+    # How many checks run in parallel. Checks are network-bound, so a slow
+    # endpoint would otherwise delay every monitor queued behind it.
+    check_concurrency: int = 8
+
+    # "json" emits one object per line for log aggregators; "text" is readable
+    # in a terminal.
+    log_format: str = "text"
+    log_level: str = "INFO"
+
+    # Rolling window used for the /metrics endpoint and dashboard percentiles.
+    metrics_window_hours: int = 24
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     @field_validator("database_url")

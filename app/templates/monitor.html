@@ -27,6 +27,14 @@
     <div class="label">Avg response</div>
   </div>
   <div class="card">
+    <div class="value">{% if summary.p95_response_ms is not none %}{{ summary.p95_response_ms }}<span style="font-size:1rem"> ms</span>{% else %}—{% endif %}</div>
+    <div class="label">p95 response</div>
+  </div>
+  <div class="card">
+    <div class="value">{% if summary.p99_response_ms is not none %}{{ summary.p99_response_ms }}<span style="font-size:1rem"> ms</span>{% else %}—{% endif %}</div>
+    <div class="label">p99 response</div>
+  </div>
+  <div class="card">
     <div class="value">{{ summary.check_count }}</div>
     <div class="label">Checks ({{ hours }}h)</div>
   </div>

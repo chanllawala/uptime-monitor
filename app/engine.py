@@ -6,6 +6,7 @@ fires — can be tested without any sleeping or threading.
 """
 
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from sqlalchemy.orm import Session
 
@@ -125,6 +126,56 @@ def check_monitor(
         timeout_seconds=monitor.timeout_seconds,
     )
     return evaluate(db, monitor, result, notifier=notifier)
+
+
+def run_due_checks(
+    db: Session,
+    monitors: list[Monitor],
+    notifier: notifications.Notifier | None = None,
+    concurrency: int | None = None,
+) -> list[Check]:
+    """Check many monitors, polling them in parallel.
+
+    Only the HTTP requests are parallelised. `perform_check` touches no shared
+    state, so it is safe to fan out; the results are then applied sequentially
+    through `evaluate` on the caller's single session. Sharing one SQLAlchemy
+    session across threads is not safe, and giving each thread its own would
+    buy nothing here — the wait is network latency, not database time.
+    """
+    if not monitors:
+        return []
+
+    concurrency = concurrency or settings.check_concurrency
+    workers = max(1, min(concurrency, len(monitors)))
+
+    results: dict[int, CheckResult] = {}
+    with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="check") as pool:
+        futures = {
+            pool.submit(
+                perform_check,
+                url=m.url,
+                method=m.method,
+                expected_status=m.expected_status,
+                timeout_seconds=m.timeout_seconds,
+            ): m
+            for m in monitors
+        }
+        for future in as_completed(futures):
+            monitor = futures[future]
+            try:
+                results[monitor.id] = future.result()
+            except Exception as exc:
+                # perform_check catches request errors itself, so reaching here
+                # means something unexpected. Record it as a failure rather
+                # than losing the monitor from this tick entirely.
+                log.exception("Unexpected error checking %r", monitor.name)
+                results[monitor.id] = CheckResult(
+                    False, None, None, f"internal error: {type(exc).__name__}"
+                )
+
+    # Applied in the original order so logs and incident timestamps stay
+    # deterministic regardless of which check happened to finish first.
+    return [evaluate(db, m, results[m.id], notifier=notifier) for m in monitors if m.id in results]
 
 
 def due_monitors(db: Session) -> list[Monitor]:

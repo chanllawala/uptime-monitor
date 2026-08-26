@@ -1,21 +1,21 @@
 """Dashboard: server-rendered FastAPI + Jinja2."""
 
-import logging
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
-from . import stats
+from . import logging_setup, stats
 from .config import settings
 from .database import Base, engine, get_db
 from .engine import check_monitor
+from .metrics import render_metrics
 from .models import Monitor
 from .timeutil import humanize_duration, utcnow
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)-8s %(name)s: %(message)s")
+logging_setup.configure("web")
 
 Base.metadata.create_all(bind=engine)
 
@@ -28,6 +28,13 @@ templates.env.filters["duration"] = humanize_duration
 def health():
     """Liveness endpoint — also handy as a monitor target for a second instance."""
     return {"status": "ok"}
+
+
+@app.get("/metrics", response_class=PlainTextResponse)
+def metrics(db: Session = Depends(get_db)):
+    """Prometheus scrape endpoint."""
+    body = render_metrics(db, hours=settings.metrics_window_hours)
+    return PlainTextResponse(body, media_type="text/plain; version=0.0.4; charset=utf-8")
 
 
 @app.get("/", response_class=HTMLResponse)

@@ -1,7 +1,15 @@
 from datetime import timedelta
 
+import pytest
+
 from app.models import Check
-from app.stats import avg_response_ms, summarize, uptime_percent
+from app.stats import (
+    avg_response_ms,
+    latency_percentiles,
+    percentile,
+    summarize,
+    uptime_percent,
+)
 from app.timeutil import humanize_duration, utcnow
 
 
@@ -57,6 +65,55 @@ def test_summary_reflects_latest_check(db, monitor):
 
     add_check(db, monitor, is_up=False)
     assert summarize(db, monitor).status == "down"
+
+
+def test_percentile_on_empty_input():
+    assert percentile([], 0.95) is None
+
+
+def test_percentile_endpoints():
+    values = [10, 20, 30, 40, 50]
+    assert percentile(values, 0) == 10
+    assert percentile(values, 1) == 50
+
+
+def test_percentile_interpolates():
+    assert percentile([10, 20], 0.5) == 15
+    assert percentile([0, 100], 0.9) == 90
+
+
+def test_percentile_median_matches_expectation():
+    assert percentile([1, 2, 3, 4, 5], 0.5) == 3
+
+
+def test_percentile_rejects_out_of_range_fraction():
+    with pytest.raises(ValueError):
+        percentile([1, 2, 3], 1.5)
+
+
+def test_percentiles_expose_the_tail_that_the_average_hides(db, monitor):
+    """Nineteen fast checks and one very slow one: the mean stays low while
+    p99 shows the outlier, which is the reason for tracking percentiles."""
+    for _ in range(19):
+        add_check(db, monitor, is_up=True, response_ms=90.0)
+    add_check(db, monitor, is_up=True, response_ms=2000.0)
+
+    result = latency_percentiles(db, monitor)
+
+    assert avg_response_ms(db, monitor) < 200
+    assert result["p50"] == 90.0
+    assert result["p99"] > 1000
+
+
+def test_percentiles_ignore_failed_checks(db, monitor):
+    add_check(db, monitor, is_up=True, response_ms=100.0)
+    add_check(db, monitor, is_up=False)
+
+    assert latency_percentiles(db, monitor)["p50"] == 100.0
+
+
+def test_percentiles_are_none_without_data(db, monitor):
+    assert latency_percentiles(db, monitor) == {"p50": None, "p95": None, "p99": None}
 
 
 def test_humanize_duration():

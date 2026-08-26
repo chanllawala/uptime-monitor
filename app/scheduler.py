@@ -11,15 +11,13 @@ import sys
 import time
 from types import FrameType
 
+from . import logging_setup
 from .config import settings
 from .database import Base, SessionLocal, engine
-from .engine import check_monitor, due_monitors
+from .engine import due_monitors, run_due_checks
 from .notifier import get_notifier
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)-8s %(name)s: %(message)s",
-)
+logging_setup.configure("worker")
 log = logging.getLogger("scheduler")
 
 _shutdown = False
@@ -44,9 +42,12 @@ def run_forever() -> None:
         log.warning("SLACK_WEBHOOK_URL is not set — alerts will be logged, not delivered")
 
     log.info(
-        "Scheduler started (tick=%ss, failure threshold=%s)",
-        settings.scheduler_tick_seconds,
-        settings.failure_threshold,
+        "Scheduler started",
+        extra={
+            "tick_seconds": settings.scheduler_tick_seconds,
+            "failure_threshold": settings.failure_threshold,
+            "concurrency": settings.check_concurrency,
+        },
     )
 
     while not _shutdown:
@@ -55,16 +56,28 @@ def run_forever() -> None:
             db = SessionLocal()
             try:
                 monitors = due_monitors(db)
-                for monitor in monitors:
-                    if _shutdown:
-                        break
-                    check = check_monitor(db, monitor, notifier=notifier)
+                checks = run_due_checks(db, monitors, notifier=notifier)
+                for monitor, check in zip(monitors, checks, strict=False):
                     log.info(
-                        "%s %s -> %s",
+                        "%s %s",
                         "UP  " if check.is_up else "DOWN",
                         monitor.name,
-                        check.error
-                        or f"HTTP {check.status_code} in {check.response_time_ms:.0f}ms",
+                        extra={
+                            "monitor": monitor.name,
+                            "url": monitor.url,
+                            "is_up": check.is_up,
+                            "status_code": check.status_code,
+                            "response_time_ms": check.response_time_ms,
+                            "error": check.error,
+                        },
+                    )
+                if monitors:
+                    log.debug(
+                        "Tick complete",
+                        extra={
+                            "checked": len(checks),
+                            "duration_ms": round((time.monotonic() - started) * 1000, 1),
+                        },
                     )
             finally:
                 db.close()

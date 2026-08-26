@@ -1,7 +1,9 @@
 """Aggregations backing the dashboard."""
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import timedelta
+from math import ceil, floor
 
 from sqlalchemy import case, func
 from sqlalchemy.orm import Session
@@ -18,6 +20,8 @@ class MonitorSummary:
     status: str  # "up" | "down" | "unknown"
     uptime_percent: float | None
     avg_response_ms: float | None
+    p95_response_ms: float | None
+    p99_response_ms: float | None
     last_check: Check | None
     open_incident: Incident | None
     check_count: int
@@ -25,6 +29,63 @@ class MonitorSummary:
     @property
     def status_label(self) -> str:
         return {"up": "Up", "down": "Down", "unknown": "No data"}[self.status]
+
+
+def percentile(values: Sequence[float], fraction: float) -> float | None:
+    """Linear-interpolated percentile.
+
+    Computed in Python rather than SQL because `percentile_cont` is a Postgres
+    extension that SQLite does not implement, and this project runs on both.
+    """
+    if not values:
+        return None
+    if not 0 <= fraction <= 1:
+        raise ValueError("fraction must be between 0 and 1")
+
+    ordered = sorted(values)
+    if len(ordered) == 1:
+        return ordered[0]
+
+    position = fraction * (len(ordered) - 1)
+    lower = floor(position)
+    upper = ceil(position)
+    if lower == upper:
+        return ordered[lower]
+    return ordered[lower] + (ordered[upper] - ordered[lower]) * (position - lower)
+
+
+def _successful_response_times(db: Session, monitor: Monitor, hours: int) -> list[float]:
+    rows = (
+        db.query(Check.response_time_ms)
+        .filter(
+            Check.monitor_id == monitor.id,
+            Check.checked_at >= _window_start(hours),
+            Check.is_up.is_(True),
+            Check.response_time_ms.isnot(None),
+        )
+        .all()
+    )
+    return [row[0] for row in rows]
+
+
+def latency_percentiles(
+    db: Session, monitor: Monitor, hours: int = DEFAULT_WINDOW_HOURS
+) -> dict[str, float | None]:
+    """p50/p95/p99 response times.
+
+    An average hides the tail: a monitor averaging 90ms while one request in
+    twenty takes two seconds looks healthy by the mean and is not.
+    """
+    values = _successful_response_times(db, monitor, hours)
+    return {
+        "p50": _round(percentile(values, 0.50)),
+        "p95": _round(percentile(values, 0.95)),
+        "p99": _round(percentile(values, 0.99)),
+    }
+
+
+def _round(value: float | None) -> float | None:
+    return round(value, 1) if value is not None else None
 
 
 def _window_start(hours: int):
@@ -102,11 +163,14 @@ def summarize(db: Session, monitor: Monitor, hours: int = DEFAULT_WINDOW_HOURS) 
         or 0
     )
 
+    pct = latency_percentiles(db, monitor, hours)
     return MonitorSummary(
         monitor=monitor,
         status=status,
         uptime_percent=uptime_percent(db, monitor, hours),
         avg_response_ms=avg_response_ms(db, monitor, hours),
+        p95_response_ms=pct["p95"],
+        p99_response_ms=pct["p99"],
         last_check=last,
         open_incident=incident,
         check_count=count,

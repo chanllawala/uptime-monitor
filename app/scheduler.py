@@ -8,6 +8,7 @@ hanging check can never block page rendering.
 import logging
 import signal
 import sys
+import threading
 import time
 from types import FrameType
 
@@ -31,9 +32,13 @@ def _handle_signal(signum: int, _frame: FrameType | None) -> None:
     _shutdown = True
 
 
-def run_forever() -> None:
-    signal.signal(signal.SIGTERM, _handle_signal)
-    signal.signal(signal.SIGINT, _handle_signal)
+def run_forever(install_signal_handlers: bool = True) -> None:
+    # signal.signal() only works on the main thread, so the in-process mode
+    # (see start_background_thread) opts out and relies on the daemon thread
+    # dying with the process instead.
+    if install_signal_handlers:
+        signal.signal(signal.SIGTERM, _handle_signal)
+        signal.signal(signal.SIGINT, _handle_signal)
 
     Base.metadata.create_all(bind=engine)
     notifier = get_notifier()
@@ -94,6 +99,25 @@ def run_forever() -> None:
             remaining -= nap
 
     log.info("Scheduler stopped")
+
+
+def start_background_thread() -> threading.Thread:
+    """Run the scheduler inside the web process.
+
+    Two processes is the better shape and stays the default: a hung check
+    cannot then stall page rendering. This mode exists for hosts whose free
+    tier has no worker process type, where the alternative is not deploying
+    the poller at all.
+    """
+    thread = threading.Thread(
+        target=run_forever,
+        kwargs={"install_signal_handlers": False},
+        name="scheduler",
+        daemon=True,
+    )
+    thread.start()
+    log.info("Scheduler started in-process alongside the web server")
+    return thread
 
 
 if __name__ == "__main__":

@@ -1,5 +1,6 @@
 """Dashboard: server-rendered FastAPI + Jinja2."""
 
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Request
@@ -19,7 +20,19 @@ logging_setup.configure("web")
 
 Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="Uptime Monitor", version="1.0.0")
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    if settings.run_scheduler_in_web:
+        # Imported here rather than at module scope so the web app does not
+        # pull in the scheduler at all in the normal two-process deployment.
+        from .scheduler import start_background_thread
+
+        start_background_thread()
+    yield
+
+
+app = FastAPI(title="Uptime Monitor", version="1.0.0", lifespan=lifespan)
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 templates.env.filters["duration"] = humanize_duration
 

@@ -23,6 +23,11 @@ class Settings(BaseSettings):
     # Rolling window used for the /metrics endpoint and dashboard percentiles.
     metrics_window_hours: int = 24
 
+    # Run the poller inside the web process instead of as its own service.
+    # Needed on hosts whose free tier offers no worker process type; two
+    # processes remains the default and the better shape.
+    run_scheduler_in_web: bool = False
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     @field_validator("database_url")

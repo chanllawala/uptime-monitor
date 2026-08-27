@@ -171,6 +171,7 @@ stalled and every other metric here has quietly gone stale.
 | `LOG_FORMAT` | `text` | `json` for structured logs |
 | `LOG_LEVEL` | `INFO` | Standard Python log levels |
 | `METRICS_WINDOW_HOURS` | `24` | Rolling window for `/metrics` and percentiles |
+| `RUN_SCHEDULER_IN_WEB` | `false` | Run the poller inside the web process, for hosts with no worker type |
 
 ## Tests
 
@@ -204,9 +205,25 @@ VM exists.
 
 ## Deployment
 
+### Render (simplest)
+
+[`render.yaml`](render.yaml) provisions a web service and a Postgres database
+as a Blueprint — no VM, no SSH, no firewall rules. In the Render dashboard:
+**New → Blueprint**, point it at this repo, **Apply**. Add
+`SLACK_WEBHOOK_URL` in the service's Environment tab afterwards.
+
+Render's free tier has no worker process type, so `RUN_SCHEDULER_IN_WEB=true`
+runs the poller inside the web process. Free services also sleep after about
+15 minutes without traffic, which for a monitoring tool means polling pauses
+while nobody is looking and resumes when the dashboard is next opened. Fine
+for a demo; not what you would run for real.
+
+### Docker on a VM (polls continuously)
+
 See [`deploy/oracle-cloud.md`](deploy/oracle-cloud.md) for provisioning an
 Oracle Cloud Always Free VM, opening both firewall layers, installing Docker,
-and wiring up the GitHub Actions deploy secrets.
+and wiring up the GitHub Actions deploy secrets. This runs the worker as its
+own process and never sleeps.
 
 ## Notes and limitations
 

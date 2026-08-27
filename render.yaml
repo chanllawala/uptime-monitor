@@ -1,0 +1,39 @@
+# Simplest possible deployment: one web service and one database, no VM.
+#
+# Render's free tier has no worker process type, so the poller runs inside the
+# web process via RUN_SCHEDULER_IN_WEB. See deploy/oracle-cloud.md for the
+# two-process Docker deployment, which is the better shape and polls
+# continuously.
+
+databases:
+  - name: uptime-monitor-db
+    plan: free
+    databaseName: uptime
+    user: uptime
+
+services:
+  - type: web
+    name: uptime-monitor
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    # Seeding is idempotent, so it is safe on every boot and gives the
+    # dashboard something to show immediately after deploying.
+    startCommand: python -m app.seed && uvicorn app.web:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: uptime-monitor-db
+          property: connectionString
+      - key: RUN_SCHEDULER_IN_WEB
+        value: "true"
+      - key: SLACK_WEBHOOK_URL
+        # Set this yourself in the Render dashboard — never commit a webhook.
+        sync: false
+      - key: FAILURE_THRESHOLD
+        value: "3"
+      - key: LOG_FORMAT
+        value: json
+      - key: PYTHON_VERSION
+        value: 3.12.7

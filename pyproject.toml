@@ -12,3 +12,7 @@ ignore = ["B008"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 filterwarnings = ["error::DeprecationWarning"]
+# Puts the project root on sys.path so `import app` resolves under a bare
+# `pytest`. Without it only `python -m pytest` works, which silently adds the
+# working directory — a discrepancy that passes locally and fails in CI.
+pythonpath = ["."]

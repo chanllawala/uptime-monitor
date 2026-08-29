@@ -207,16 +207,26 @@ VM exists.
 
 ### Render (simplest)
 
-[`render.yaml`](render.yaml) provisions a web service and a Postgres database
-as a Blueprint — no VM, no SSH, no firewall rules. In the Render dashboard:
-**New → Blueprint**, point it at this repo, **Apply**. Add
-`SLACK_WEBHOOK_URL` in the service's Environment tab afterwards.
+[`render.yaml`](render.yaml) provisions a single free web service and nothing
+else — no VM, no SSH, no firewall rules, no database resource. In the Render
+dashboard: **New → Blueprint**, point it at this repo, **Apply**.
 
-Render's free tier has no worker process type, so `RUN_SCHEDULER_IN_WEB=true`
-runs the poller inside the web process. Free services also sleep after about
-15 minutes without traffic, which for a monitoring tool means polling pauses
-while nobody is looking and resumes when the dashboard is next opened. Fine
-for a demo; not what you would run for real.
+It deliberately asks for no Postgres, because Render allows only one free
+database per account and a blueprint requesting a second one fails outright.
+With `DATABASE_URL` unset the app falls back to SQLite. To keep history across
+restarts, set `DATABASE_URL` to any Postgres connection string in the
+service's Environment tab; nothing else changes. `SLACK_WEBHOOK_URL` goes in
+the same place.
+
+Two free-tier caveats worth knowing before showing anyone:
+
+- Free services sleep after ~15 minutes idle, so polling pauses while nobody
+  is looking and resumes when the dashboard is next opened.
+- The free filesystem is ephemeral, so SQLite history resets when the service
+  restarts. The app re-seeds on boot, so it returns with monitors ready rather
+  than empty.
+
+Fine for a demo; not what you would run for real.
 
 ### Docker on a VM (polls continuously)
 

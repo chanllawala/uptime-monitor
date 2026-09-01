@@ -1,13 +1,23 @@
 # Uptime Monitor
 
-A self-hosted uptime and response-time monitor. It polls a list of HTTP
-endpoints on a schedule, records every result, opens and closes incidents as
-services fail and recover, and sends real Slack alerts when something breaks.
+**A self-hosted uptime monitor that alerts like a real one** — it polls your
+endpoints, tracks incidents rather than individual failures, and messages
+Slack when something breaks or comes back.
 
-Containerised with Docker Compose, tested and linted in GitHub Actions, and
-deployed to a cloud VM.
+[![CI](https://github.com/chanllawala/uptime-monitor/actions/workflows/ci.yml/badge.svg)](https://github.com/chanllawala/uptime-monitor/actions/workflows/ci.yml)
+![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?logo=postgresql&logoColor=white)
+![Prometheus](https://img.shields.io/badge/Prometheus-E6522C?logo=prometheus&logoColor=white)
+![Tests](https://img.shields.io/badge/tests-55%20passing-3fb950)
 
-![CI](https://github.com/chanllawala/uptime-monitor/actions/workflows/ci.yml/badge.svg)
+![Dashboard showing four monitors with uptime percentages, response times and an ongoing incident](docs/dashboard.png)
+
+**Per-monitor detail** — p50/p95/p99 latency alongside the average, a
+response-time chart, and the incident history:
+
+![Monitor detail with latency percentiles and a response-time chart](docs/monitor-detail.png)
 
 ---
 
